@@ -38,12 +38,7 @@ func (u *UpdateBatchBuilder) Build() (string, error) {
 		return "", err
 	}
 	for _, doc := range u.Documents {
-		// encode
-		encoded, err := JSONEncode(&doc, u.fields)
-		if err != nil {
-			return "", err
-		}
-
+		var err error
 		// write
 		if !first {
 			if _, err = builder.WriteString(","); err != nil {
@@ -58,7 +53,7 @@ func (u *UpdateBatchBuilder) Build() (string, error) {
 		if _, err = builder.WriteString(`:{"doc":`); err != nil {
 			return "", err
 		}
-		if _, err = builder.WriteString(encoded); err != nil {
+		if err = u.encodeDoc(&builder, doc); err != nil {
 			return "", err
 		}
 		if _, err = builder.WriteString("}"); err != nil {
@@ -73,31 +68,11 @@ func (u *UpdateBatchBuilder) Build() (string, error) {
 			}
 		}
 
-		var idsBuilder strings.Builder
-		if _, err := idsBuilder.WriteString("["); err != nil {
+		var delete strings.Builder
+		if err := u.encodeDelete(&delete); err != nil {
 			return "", err
 		}
-		for i, doc := range u.DeleteDocuments {
-			if i != 0 {
-				if _, err := idsBuilder.WriteString(","); err != nil {
-					return "", err
-				}
-			}
-			if err := writeString(&idsBuilder, doc.ID, true); err != nil {
-				return "", err
-			}
-		}
-		if _, err := idsBuilder.WriteString("]"); err != nil {
-			return "", err
-		}
-
-		if err := writeString(&builder, "delete", true); err != nil {
-			return "", err
-		}
-		if _, err := builder.WriteString(`:`); err != nil {
-			return "", err
-		}
-		if _, err := builder.WriteString(idsBuilder.String()); err != nil {
+		if err := writeField(&builder, "delete", delete.String(), false); err != nil {
 			return "", err
 		}
 	}
@@ -107,6 +82,40 @@ func (u *UpdateBatchBuilder) Build() (string, error) {
 	}
 
 	return builder.String(), nil
+}
+
+func (u *UpdateBatchBuilder) encodeDoc(builder *strings.Builder, doc Document) error {
+	// encode
+	encoded, err := JSONEncode(&doc, u.fields)
+	if err != nil {
+		return err
+	}
+
+	if err := writeString(builder, encoded, false); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (u *UpdateBatchBuilder) encodeDelete(builder *strings.Builder) error {
+	if _, err := builder.WriteString("["); err != nil {
+		return err
+	}
+	for i, doc := range u.DeleteDocuments {
+		if i != 0 {
+			if _, err := builder.WriteString(","); err != nil {
+				return err
+			}
+		}
+		if err := writeString(builder, doc.ID, true); err != nil {
+			return err
+		}
+	}
+	if _, err := builder.WriteString("]"); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (u *UpdateBatchBuilder) Flush() {
