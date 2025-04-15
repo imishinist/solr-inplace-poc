@@ -115,7 +115,7 @@ func TestUpdateBatchBuilder_Build(t *testing.T) {
 			}
 
 			if got != c.expected {
-				t.Fatalf("expected %v, but got: %v", c.expected, got)
+				t.Fatalf("\nexpected:%v\nbut got: %v", c.expected, got)
 			}
 
 			builder.Flush()
@@ -124,7 +124,7 @@ func TestUpdateBatchBuilder_Build(t *testing.T) {
 				t.Fatal(err)
 			}
 			if got != "{}" {
-				t.Fatalf("expected {}, but got: %v", got)
+				t.Fatalf("\nexpected:{}\nbut got: %v", got)
 			}
 		})
 	}

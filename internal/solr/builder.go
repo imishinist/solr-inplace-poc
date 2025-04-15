@@ -1,6 +1,8 @@
 package solr
 
-import "strings"
+import (
+	"strings"
+)
 
 type UpdateBatchBuilder struct {
 	// configuration
@@ -8,25 +10,36 @@ type UpdateBatchBuilder struct {
 	inPlaceUpdateFields []string
 
 	// states
-	Documents       []Document
-	DeleteDocuments []Document
+	OldDocuments    DocSet // old documents for in-place update
+	Documents       DocSet
+	DeleteDocuments DocSet
 }
 
 func NewUpdateBatchBuilder(fields []string, inPlaceUpdateFields []string) *UpdateBatchBuilder {
 	return &UpdateBatchBuilder{
 		fields:              fields,
 		inPlaceUpdateFields: inPlaceUpdateFields,
-		Documents:           make([]Document, 0),
-		DeleteDocuments:     make([]Document, 0),
+		OldDocuments:        make(DocSet),
+		Documents:           make(DocSet),
+		DeleteDocuments:     make(DocSet),
 	}
 }
 
-func (u *UpdateBatchBuilder) Add(doc ...Document) {
-	u.Documents = append(u.Documents, doc...)
+func (u *UpdateBatchBuilder) Add(docs ...Document) {
+	for _, doc := range docs {
+		u.Documents.Add(doc)
+	}
 }
 
-func (u *UpdateBatchBuilder) Delete(doc ...Document) {
-	u.DeleteDocuments = append(u.DeleteDocuments, doc...)
+func (u *UpdateBatchBuilder) Update(newDoc, oldDoc Document) {
+	u.OldDocuments.Add(oldDoc)
+	u.Documents.Add(newDoc)
+}
+
+func (u *UpdateBatchBuilder) Delete(docs ...Document) {
+	for _, doc := range docs {
+		u.DeleteDocuments.Add(doc)
+	}
 }
 
 func (u *UpdateBatchBuilder) Build() (string, error) {
@@ -37,7 +50,7 @@ func (u *UpdateBatchBuilder) Build() (string, error) {
 	if _, err := builder.WriteString("{"); err != nil {
 		return "", err
 	}
-	for _, doc := range u.Documents {
+	for doc := range u.Documents.Iter() {
 		var err error
 		// write
 		if !first {
@@ -102,12 +115,14 @@ func (u *UpdateBatchBuilder) encodeDelete(builder *strings.Builder) error {
 	if _, err := builder.WriteString("["); err != nil {
 		return err
 	}
-	for i, doc := range u.DeleteDocuments {
-		if i != 0 {
+	first := true
+	for doc := range u.DeleteDocuments.Iter() {
+		if !first {
 			if _, err := builder.WriteString(","); err != nil {
 				return err
 			}
 		}
+		first = false
 		if err := writeString(builder, doc.ID, true); err != nil {
 			return err
 		}
@@ -119,6 +134,7 @@ func (u *UpdateBatchBuilder) encodeDelete(builder *strings.Builder) error {
 }
 
 func (u *UpdateBatchBuilder) Flush() {
-	u.Documents = u.Documents[:0]
-	u.DeleteDocuments = u.DeleteDocuments[:0]
+	u.OldDocuments = make(DocSet)
+	u.Documents = make(DocSet)
+	u.DeleteDocuments = make(DocSet)
 }
