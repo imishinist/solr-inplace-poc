@@ -3,6 +3,8 @@ package solr
 import (
 	"iter"
 	"sort"
+
+	"github.com/imishinist/solr-inplace-poc/internal/myiter"
 )
 
 type Field struct {
@@ -10,9 +12,34 @@ type Field struct {
 	Value interface{}
 }
 
+type Fields []Field
+
+func (f *Fields) Iter() iter.Seq[Field] {
+	sort.Slice(*f, func(i, j int) bool {
+		return (*f)[i].Key < (*f)[j].Key
+	})
+	return func(yield func(Field) bool) {
+		for _, field := range *f {
+			if !yield(field) {
+				return
+			}
+		}
+	}
+}
+
+func FieldCompare(f1 Field, f2 Field) int {
+	if f1.Key == f2.Key {
+		return 0
+	}
+	if f1.Key < f2.Key {
+		return -1
+	}
+	return 1
+}
+
 type Document struct {
 	ID     string
-	Fields []Field
+	Fields Fields
 }
 
 type DocSet map[string]Document
@@ -39,83 +66,31 @@ func (d *DocSet) Iter() iter.Seq[Document] {
 	}
 }
 
-type MergedDoc struct {
-	Left  *Document
-	Right *Document
+func DocumentCompare(d1, d2 Document) int {
+	if d1.ID == d2.ID {
+		return 0
+	}
+	if d1.ID < d2.ID {
+		return -1
+	}
+	return 1
 }
 
+type MergedDoc myiter.Merged[Document]
+
 type MergedDocSetIterator struct {
-	left  iter.Seq[Document]
-	right iter.Seq[Document]
+	inner *myiter.MergedIterator[Document]
 }
 
 func NewMergedDocSetIterator(left, right iter.Seq[Document]) *MergedDocSetIterator {
+	inner := myiter.NewMergedIterator(left, right, DocumentCompare)
 	return &MergedDocSetIterator{
-		left:  left,
-		right: right,
+		inner: inner,
 	}
 }
 
-func (m *MergedDocSetIterator) Iter() iter.Seq[MergedDoc] {
-	next1, stop1 := iter.Pull(m.left)
-	next2, stop2 := iter.Pull(m.right)
-
-	return func(yield func(MergedDoc) bool) {
-		defer stop1()
-		defer stop2()
-
-		var cursor1, cursor2 iterHolder[Document]
-		for {
-			cursor1.next(next1)
-			cursor2.next(next2)
-			if cursor1.stop && cursor2.stop {
-				return
-			}
-
-			// only cursor1
-			if !cursor1.stop && cursor2.stop {
-				doc := *cursor1.value
-				cursor1.reset()
-
-				if !yield(MergedDoc{Left: &doc}) {
-					return
-				}
-				continue
-			}
-
-			// only cursor2
-			if cursor1.stop && !cursor2.stop {
-				doc := *cursor2.value
-				cursor2.reset()
-				if !yield(MergedDoc{Right: &doc}) {
-					return
-				}
-				continue
-			}
-
-			doc1 := *cursor1.value
-			doc2 := *cursor2.value
-			if doc1.ID == doc2.ID {
-				cursor1.reset()
-				cursor2.reset()
-				if !yield(MergedDoc{Left: &doc1, Right: &doc2}) {
-					return
-				}
-				continue
-			}
-			if doc1.ID < doc2.ID {
-				cursor1.reset()
-				if !yield(MergedDoc{Left: &doc1}) {
-					return
-				}
-			} else {
-				cursor2.reset()
-				if !yield(MergedDoc{Right: &doc2}) {
-					return
-				}
-			}
-		}
-	}
+func (m *MergedDocSetIterator) Iter() iter.Seq[myiter.Merged[Document]] {
+	return m.inner.Iter()
 }
 
 type iterHolder[T any] struct {

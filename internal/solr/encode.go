@@ -17,6 +17,23 @@ func contains(slice []string, str string) bool {
 // JSONEncode encodes document with json format.
 // allowedFields is a fields slice that allowed encoding
 func JSONEncode(doc *Document, allowedFields []string) (string, error) {
+	return encode(doc, allowedFields, func(builder *queryBuilder, key, value string, quote bool) {
+		// write: `"#{key}": #{value}`
+		builder.WriteKVString(key, value, quote)
+	})
+}
+
+func InPlaceUpdateEncode(doc *Document, allowedFields []string) (string, error) {
+	return encode(doc, allowedFields, func(builder *queryBuilder, key, value string, quote bool) {
+		// write: `"#{key}":{"set":#{value}}`
+		builder.WriteQuoteString(key, true)
+		builder.WriteString(`:{`)
+		builder.WriteKVString("set", value, quote)
+		builder.WriteString(`}`)
+	})
+}
+
+func encode(doc *Document, allowedFields []string, yield func(builder *queryBuilder, key, value string, quote bool)) (string, error) {
 	var builder queryBuilder
 
 	builder.WriteString("{")
@@ -48,8 +65,8 @@ func JSONEncode(doc *Document, allowedFields []string) (string, error) {
 		default:
 			return "", errors.New("unsupported field type")
 		}
+		yield(&builder, field.Key, value, quote)
 
-		builder.WriteKVString(field.Key, value, quote)
 	}
 	builder.WriteString("}")
 
