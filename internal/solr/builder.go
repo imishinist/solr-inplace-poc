@@ -33,6 +33,12 @@ func (u *UpdateBatchBuilder) Add(docs ...Document) {
 	}
 }
 
+func (u *UpdateBatchBuilder) AddOld(docs ...Document) {
+	for _, doc := range docs {
+		u.OldDocuments.Add(doc)
+	}
+}
+
 func (u *UpdateBatchBuilder) Update(newDoc, oldDoc Document) {
 	u.OldDocuments.Add(oldDoc)
 	u.Documents.Add(newDoc)

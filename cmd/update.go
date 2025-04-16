@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/csv"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -94,8 +95,24 @@ var updateCmd = &cobra.Command{
 			return err
 		}
 
-		builder := solr.NewUpdateBatchBuilder(nil, nil)
+		fmt.Printf("allowed fields: %+v\n", allowedFields)
+		fmt.Printf("inplace fields: %+v\n", inplaceFields)
+
+		builder := solr.NewUpdateBatchBuilder(allowedFields, inplaceFields)
 		builder.Add(docs...)
+
+		if oldCsvFile != "" {
+
+			old, err := openFile(oldCsvFile)
+			if err != nil {
+				return err
+			}
+			olds, err := parseCSV(old)
+			if err != nil {
+				return err
+			}
+			builder.AddOld(olds...)
+		}
 
 		var (
 			body string
@@ -103,6 +120,8 @@ var updateCmd = &cobra.Command{
 		if body, err = builder.Build(); err != nil {
 			return err
 		}
+		fmt.Println(body)
+		fmt.Println()
 
 		resp, err := sc.Update(body)
 		if err != nil {
@@ -119,7 +138,11 @@ var (
 	solrHost   string
 	collection string
 
-	csvFile string
+	csvFile    string
+	oldCsvFile string
+
+	allowedFields = []string{}
+	inplaceFields = []string{}
 )
 
 func init() {
@@ -129,4 +152,7 @@ func init() {
 	updateCmd.PersistentFlags().StringVar(&collection, "collection", "test", "solr collection")
 
 	updateCmd.PersistentFlags().StringVar(&csvFile, "csv", "-", "csv file")
+	updateCmd.PersistentFlags().StringVar(&oldCsvFile, "old-csv", "", "old csv file")
+	updateCmd.PersistentFlags().StringSliceVarP(&allowedFields, "allowed-fields", "a", nil, "allowed fields")
+	updateCmd.PersistentFlags().StringSliceVarP(&inplaceFields, "inplace-fields", "i", nil, "inplace fields")
 }
