@@ -3,7 +3,6 @@ package solr
 import (
 	"errors"
 	"fmt"
-	"strings"
 )
 
 func contains(slice []string, str string) bool {
@@ -18,27 +17,19 @@ func contains(slice []string, str string) bool {
 // JSONEncode encodes document with json format.
 // allowedFields is a fields slice that allowed encoding
 func JSONEncode(doc *Document, allowedFields []string) (string, error) {
-	var builder strings.Builder
-	var err error
+	var builder queryBuilder
 
-	_, err = builder.WriteString("{")
-	if err != nil {
-		return "", err
-	}
+	builder.WriteString("{")
 
 	// write ID
-	if err = writeField(&builder, "id", doc.ID, true); err != nil {
-		return "", err
-	}
+	builder.WriteKVString("id", doc.ID, true)
 	for _, field := range doc.Fields {
 		if allowedFields != nil && !contains(allowedFields, field.Key) {
 			continue
 		}
 
-		_, err = builder.WriteString(",")
-		if err != nil {
-			return "", err
-		}
+		builder.WriteString(",")
+
 		var value string
 		var quote bool
 		switch v := field.Value.(type) {
@@ -58,47 +49,12 @@ func JSONEncode(doc *Document, allowedFields []string) (string, error) {
 			return "", errors.New("unsupported field type")
 		}
 
-		if err = writeField(&builder, field.Key, value, quote); err != nil {
-			return "", err
-		}
+		builder.WriteKVString(field.Key, value, quote)
 	}
-
 	builder.WriteString("}")
+
+	if err := builder.Error(); err != nil {
+		return "", err
+	}
 	return builder.String(), nil
-}
-
-func writeString(builder *strings.Builder, value string, quote bool) error {
-	var err error
-	if quote {
-		if _, err = builder.WriteString("\""); err != nil {
-			return err
-		}
-	}
-
-	if _, err = builder.WriteString(value); err != nil {
-		return err
-	}
-
-	if quote {
-		if _, err = builder.WriteString("\""); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func writeField(builder *strings.Builder, key, value string, quote bool) error {
-	var err error
-	if err = writeString(builder, key, true); err != nil {
-		return err
-	}
-
-	if _, err = builder.WriteString(":"); err != nil {
-		return err
-	}
-
-	if err = writeString(builder, value, quote); err != nil {
-		return err
-	}
-	return nil
 }

@@ -44,92 +44,63 @@ func (u *UpdateBatchBuilder) Delete(docs ...Document) {
 
 func (u *UpdateBatchBuilder) Build() (string, error) {
 	var (
-		builder strings.Builder
+		builder queryBuilder
 		first   = true
 	)
-	if _, err := builder.WriteString("{"); err != nil {
-		return "", err
-	}
+	builder.WriteString("{")
 	for doc := range u.Documents.Iter() {
-		var err error
 		// write
 		if !first {
-			if _, err = builder.WriteString(","); err != nil {
-				return "", err
-			}
+			builder.WriteString(",")
 		}
 		first = false
 
-		if err = writeString(&builder, "add", true); err != nil {
+		builder.WriteString(`"add":{"doc":`)
+		if err := u.encodeDoc(&builder, doc); err != nil {
 			return "", err
 		}
-		if _, err = builder.WriteString(`:{"doc":`); err != nil {
-			return "", err
-		}
-		if err = u.encodeDoc(&builder, doc); err != nil {
-			return "", err
-		}
-		if _, err = builder.WriteString("}"); err != nil {
-			return "", err
-		}
+		builder.WriteString("}")
 	}
 
 	if len(u.DeleteDocuments) > 0 {
 		if !first {
-			if _, err := builder.WriteString(","); err != nil {
-				return "", err
-			}
+			builder.WriteString(",")
 		}
 
-		var delete strings.Builder
-		if err := u.encodeDelete(&delete); err != nil {
-			return "", err
-		}
-		if err := writeField(&builder, "delete", delete.String(), false); err != nil {
+		builder.WriteString(`"delete":`)
+		if err := u.encodeDelete(&builder); err != nil {
 			return "", err
 		}
 	}
+	builder.WriteString("}")
 
-	if _, err := builder.WriteString("}"); err != nil {
+	if err := builder.Error(); err != nil {
 		return "", err
 	}
-
 	return builder.String(), nil
 }
 
-func (u *UpdateBatchBuilder) encodeDoc(builder *strings.Builder, doc Document) error {
+func (u *UpdateBatchBuilder) encodeDoc(builder *queryBuilder, doc Document) error {
 	// encode
 	encoded, err := JSONEncode(&doc, u.fields)
 	if err != nil {
 		return err
 	}
-
-	if err := writeString(builder, encoded, false); err != nil {
-		return err
-	}
-
+	builder.WriteString(encoded)
 	return nil
 }
 
-func (u *UpdateBatchBuilder) encodeDelete(builder *strings.Builder) error {
-	if _, err := builder.WriteString("["); err != nil {
-		return err
-	}
+func (u *UpdateBatchBuilder) encodeDelete(builder *queryBuilder) error {
 	first := true
+	builder.WriteString("[")
 	for doc := range u.DeleteDocuments.Iter() {
 		if !first {
-			if _, err := builder.WriteString(","); err != nil {
-				return err
-			}
+			builder.WriteString(",")
 		}
 		first = false
-		if err := writeString(builder, doc.ID, true); err != nil {
-			return err
-		}
+		builder.WriteQuoteString(doc.ID, true)
 	}
-	if _, err := builder.WriteString("]"); err != nil {
-		return err
-	}
+	builder.WriteString("]")
 	return nil
 }
 
@@ -137,4 +108,54 @@ func (u *UpdateBatchBuilder) Flush() {
 	u.OldDocuments = make(DocSet)
 	u.Documents = make(DocSet)
 	u.DeleteDocuments = make(DocSet)
+}
+
+type queryBuilder struct {
+	builder strings.Builder
+	err     error
+}
+
+func (q *queryBuilder) WriteString(x string) {
+	if q.err != nil {
+		return
+	}
+	if _, err := q.builder.WriteString(x); err != nil {
+		q.err = err
+		return
+	}
+}
+
+func (q *queryBuilder) WriteQuoteString(x string, quote bool) {
+	if q.err != nil {
+		return
+	}
+
+	if quote {
+		q.WriteString("\"")
+	}
+	q.WriteString(x)
+	if quote {
+		q.WriteString("\"")
+	}
+}
+
+func (q *queryBuilder) WriteKVString(key string, value string, quote bool) {
+	if q.err != nil {
+		return
+	}
+
+	q.WriteQuoteString(key, true)
+	q.WriteString(":")
+	q.WriteQuoteString(value, quote)
+}
+
+func (q *queryBuilder) String() string {
+	if q.err != nil {
+		return ""
+	}
+	return q.builder.String()
+}
+
+func (q *queryBuilder) Error() error {
+	return q.err
 }
