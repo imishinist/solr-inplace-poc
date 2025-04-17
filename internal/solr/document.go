@@ -92,27 +92,3 @@ func NewMergedDocSetIterator(left, right iter.Seq[Document]) *MergedDocSetIterat
 func (m *MergedDocSetIterator) Iter() iter.Seq[myiter.Merged[Document]] {
 	return m.inner.Iter()
 }
-
-type iterHolder[T any] struct {
-	value *T
-	stop  bool
-}
-
-func (i *iterHolder[T]) next(yield func() (T, bool)) {
-	if i.stop {
-		return
-	}
-	if i.value != nil {
-		return
-	}
-
-	value, ok := yield()
-	i.stop = !ok
-	if ok {
-		i.value = &value
-	}
-}
-
-func (i *iterHolder[T]) reset() {
-	i.value = nil
-}
