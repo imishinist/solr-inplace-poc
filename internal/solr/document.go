@@ -2,6 +2,8 @@ package solr
 
 import (
 	"iter"
+	"maps"
+	"slices"
 	"sort"
 
 	"github.com/imishinist/solr-inplace-poc/internal/myiter"
@@ -49,17 +51,9 @@ func (d *DocSet) Add(doc Document) {
 }
 
 func (d *DocSet) Iter() iter.Seq[Document] {
-	docs := make([]Document, 0, len(*d))
-	for _, doc := range *d {
-		docs = append(docs, doc)
-	}
-	sort.Slice(docs, func(i, j int) bool {
-		return docs[i].ID < docs[j].ID
-	})
-
 	return func(yield func(Document) bool) {
-		for _, doc := range docs {
-			if !yield(doc) {
+		for _, k := range slices.Sorted(maps.Keys(*d)) {
+			if !yield((*d)[k]) {
 				return
 			}
 		}
