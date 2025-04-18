@@ -1,0 +1,51 @@
+
+x-solr-slave: &solr-slave
+  image: solr:9.2.1
+  depends_on:
+    - solr-master
+  volumes:
+    - ./containers/solr/slave/conf:/opt/solr/server/solr/configsets/my_core_conf/conf
+  environment:
+    - SOLR_HEAP=1g
+    - SOLR_OPTS=-Dsolr.disable.allowUrls=true
+  command:
+    - solr-precreate
+    - my_core
+    - /opt/solr/server/solr/configsets/my_core_conf
+  networks:
+    - solr-network
+
+services:
+  solr-master:
+    image: solr:9.2.1
+    container_name: solr-master
+    ports:
+      - "8983:8983"
+    volumes:
+      - ./containers/solr/master/conf:/opt/solr/server/solr/configsets/my_core_conf/conf
+      - solr_master_data:/var/solr
+    environment:
+      - SOLR_HEAP=1g
+      - SOLR_OPTS=-Dsolr.disable.allowUrls=true
+    command:
+      - solr-precreate
+      - my_core
+      - /opt/solr/server/solr/configsets/my_core_conf
+    networks:
+      - solr-network
+
+  solr-slave1:
+    <<: *solr-slave
+    ports:
+      - 8984:8983
+    volumes:
+      - ./containers/solr/slave/conf:/opt/solr/server/solr/configsets/my_core_conf/conf
+      - solr_slave1_data:/var/solr
+
+networks:
+  solr-network:
+    driver: bridge
+
+volumes:
+  solr_master_data:
+  solr_slave1_data:
